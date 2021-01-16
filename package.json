@@ -19,7 +19,6 @@
   "homepage": "https://github.com/MathisBullinger/stripbot#readme",
   "dependencies": {
     "axios": "^0.21.1",
-    "node-fetch": "^2.6.1",
     "puppeteer": "^5.5.0",
     "unzipper": "^0.10.11"
   }

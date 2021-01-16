@@ -31,14 +31,11 @@ process.env = {
   await page.waitForTimeout(500)
   await page.click("input[type='submit']")
 
-  await page.waitForSelector('.token.keyword')
+  await page.waitForSelector('code > span.token')
   await playRound()
 
   async function playRound() {
-    // await page.screenshot({
-    //   path: `screenshots/${Date.now()}.png`,
-    //   fullPage: true,
-    // })
+    await page.waitForSelector('code > span.token')
     const answerBts = await page.$$('.mb-4 > button')
 
     const names = await Promise.all(
@@ -46,39 +43,62 @@ process.env = {
         page.evaluate((e) => e.querySelector('span').textContent, v)
       )
     )
-    let code = await page.evaluate(
-      (n) => n.textContent.trim(),
-      await page.$('code')
-    )
-    code = code.split('\n')[0]
-    console.log(`\nsearch for "${code}"\n`)
+    let code = await page.evaluate((n) => n.textContent, await page.$('code'))
 
-    let match = await new Promise((res) => {
-      Promise.all(
-        names.map((repo) =>
-          fetchRepo(repo).then(() => {
-            console.log('search', repo)
-            return search(code, `cache/${repo}/`).then((v) => {
-              if (v) res(repo)
+    let match
+
+    let lines = code
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .sort(
+        (a, b) =>
+          b.replace(/[\s{}()\[\]]/g, '').length -
+          a.replace(/[\s{}()\[\]]/g, '').length
+      )
+
+    for (let code of lines) {
+      console.log(`\nsearch for [${lines.indexOf(code)}] "${code}"`)
+
+      match = await new Promise((res) => {
+        Promise.all(
+          names.map((repo) =>
+            fetchRepo(repo).then(() => {
+              console.log('search', repo)
+              return search(code, `cache/${repo}/`).then((v) => {
+                if (v) res(repo)
+              })
             })
-          })
-        )
-      ).then(res)
-    })
+          )
+        ).then(() => setTimeout(res))
+      })
+      if (typeof match === 'string') break
+    }
 
     if (typeof match !== 'string') {
       console.error('no match found')
       match = names[0]
-    }
+    } else console.log('found in', match)
 
-    console.log('found in', match)
-    await answerBts[names.indexOf(match)].click()
-    await page.waitForSelector("button[phx-click='nextQuestion']")
-    await (await page.$("button[phx-click='nextQuestion']")).click()
+    const s = `.mb-4:nth-child(${names.indexOf(match) + 2}) > button`
+    await page.waitForSelector(s)
+    await page.click(s)
+
+    while (true) {
+      try {
+        await page.waitForSelector("button[phx-click='nextQuestion']", {
+          timeout: 2000,
+        })
+        await page.click("button[phx-click='nextQuestion']")
+        break
+      } catch (e) {
+        logger.warn("couldn't submit")
+        await page.waitForTimeout(500)
+      }
+    }
+    await page.waitFor(() => !document.querySelector('.bg-green-100'))
     await playRound()
   }
-
-  await browser.close()
 })()
 
 async function fetchRepo(name, branch = 'master') {
@@ -109,28 +129,33 @@ async function defaultBranch(name) {
   return default_branch
 }
 
+let active = []
+
 function search(phrase, dir) {
   return new Promise((res) => {
     try {
-      // let toId
+      let toId
       const p = exec(
-        `grep '${phrase.replace(/'/g, "\\'")}' -R ${dir}`,
+        `ag "${phrase.replace(/"/g, '${dq}')}" ${dir} --nomultiline -Q -t`,
         (err, v) => {
-          p.kill()
-          // clearTimeout(toId)
-          if (v) res(true)
-          else res(false)
+          if (v) {
+            active.forEach((f) => f())
+            active = []
+            res(true)
+          } else res(false)
         }
       )
-      // toId = setTimeout(() => {
-      //   p.kill()
-      //   console.warn(`${dir} timed out`)
-      //   res(false)
-      // }, 5000)
+      toId = setTimeout(() => {
+        p.kill()
+        console.warn(`${dir} timed out`)
+        res(true)
+      }, 15000)
+      active.push(() => {
+        clearTimeout(toId)
+        p.kill()
+      })
     } catch (e) {
       res(false)
     }
   })
 }
-
-module.exports = { search }
