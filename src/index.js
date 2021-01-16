@@ -3,7 +3,6 @@ const fs = require('fs')
 const axios = require('axios')
 const unzipper = require('unzipper')
 const exec = require('child_process').exec
-const path = require('path')
 
 process.env = {
   ...process.env,
@@ -36,10 +35,10 @@ process.env = {
   await playRound()
 
   async function playRound() {
-    await page.screenshot({
-      path: `screenshots/${Date.now()}.png`,
-      fullPage: true,
-    })
+    // await page.screenshot({
+    //   path: `screenshots/${Date.now()}.png`,
+    //   fullPage: true,
+    // })
     const answerBts = await page.$$('.mb-4 > button')
 
     const names = await Promise.all(
@@ -54,21 +53,23 @@ process.env = {
     code = code.split('\n')[0]
     console.log(`\nsearch for "${code}"\n`)
 
-    const match = await new Promise((res) => {
+    let match = await new Promise((res) => {
       Promise.all(
         names.map((repo) =>
-          fetchRepo(repo)
-            .then(() => {
-              search(code, `cache/${repo}/`)
-            })
-            .then((v) => {
+          fetchRepo(repo).then(() => {
+            console.log('search', repo)
+            return search(code, `cache/${repo}/`).then((v) => {
               if (v) res(repo)
             })
+          })
         )
-      )
+      ).then(res)
     })
 
-    if (typeof match !== 'string') throw Error('not found')
+    if (typeof match !== 'string') {
+      console.error('no match found')
+      match = names[0]
+    }
 
     console.log('found in', match)
     await answerBts[names.indexOf(match)].click()
@@ -108,59 +109,28 @@ async function defaultBranch(name) {
   return default_branch
 }
 
-const ignoreFiles = /\.(md|json|yml|lock|png|jpeg|jpg|svg|gif|snap)$/
-const ignoreDirs = [
-  'config',
-  '.github',
-  '.circleci',
-  '.vscode',
-  'packages',
-  'assets',
-  'resources',
-  'test',
-  'bin',
-  'build',
-  '__tests__',
-  'docs',
-  'demo',
-  'style',
-]
-
-async function search(phrase, dir) {
-  for (const file of fs.readdirSync(dir)) {
-    const stat = fs.lstatSync(dir + file)
-    if (stat.isDirectory()) {
-      if (
-        !ignoreDirs.includes(file) &&
-        (await search(phrase, `${dir}${file}/`))
+function search(phrase, dir) {
+  return new Promise((res) => {
+    try {
+      // let toId
+      const p = exec(
+        `grep '${phrase.replace(/'/g, "\\'")}' -R ${dir}`,
+        (err, v) => {
+          p.kill()
+          // clearTimeout(toId)
+          if (v) res(true)
+          else res(false)
+        }
       )
-        return true
-    } else {
-      if (ignoreFiles.test(file)) continue
-      try {
-        // await new Promise((res) =>
-        //   exec(
-        //     `node ${path.join(__dirname, 'read.js')} ${dir + file}`,
-        //     { timeout: 150 },
-        //     (err, out) => {
-        //       if (err) console.warn(err)
-        //       else if (out.includes(phrase)) return true
-        //       res()
-        //     }
-        //   )
-        //     .on('exit', res)
-        //     .on('disconnect', res)
-        //     .on('close', res)
-        // )
-        const content = fs.readFileSync(dir + file, 'utf-8')
-        if (content.includes(phrase)) return true
-      } catch (e) {
-        console.warn(`couldn't read ${file}`)
-        console.error(e)
-      }
+      // toId = setTimeout(() => {
+      //   p.kill()
+      //   console.warn(`${dir} timed out`)
+      //   res(false)
+      // }, 5000)
+    } catch (e) {
+      res(false)
     }
-  }
-  return false
+  })
 }
 
 module.exports = { search }
