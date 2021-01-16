@@ -1,0 +1,26 @@
+{
+  "name": "stripbot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node src"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MathisBullinger/stripbot.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/MathisBullinger/stripbot/issues"
+  },
+  "homepage": "https://github.com/MathisBullinger/stripbot#readme",
+  "dependencies": {
+    "axios": "^0.21.1",
+    "node-fetch": "^2.6.1",
+    "puppeteer": "^5.5.0",
+    "unzipper": "^0.10.11"
+  }
+}
